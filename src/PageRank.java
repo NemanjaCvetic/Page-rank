@@ -121,7 +121,7 @@ public class PageRank {
 
     private void computeDistributed() {
         // Placeholder for distributed computation
-        // This would typically involve network communication and data partitioning
+
         System.out.println("Distributed computation not implemented yet");
     }
 
