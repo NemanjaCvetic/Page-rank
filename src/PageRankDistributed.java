@@ -32,7 +32,7 @@ public class PageRankDistributed {
             adjacencyList.add(new ArrayList<>());
         }
 
-        // Generate random graph
+
         generateRandomGraph();
         calculateOutDegrees();
 
@@ -79,7 +79,7 @@ public class PageRankDistributed {
                 return;
             }
 
-            // Proper MPI initialization
+            // MPI initialization
             this.mpiRank = MPI.COMM_WORLD.Rank();
             this.mpiSize = MPI.COMM_WORLD.Size();
 
@@ -138,8 +138,7 @@ public class PageRankDistributed {
                 System.out.println("Processing " + numVertices + " vertices, " + numEdges + " edges");
             }
 
-            // Broadcast graph data to all processes if needed
-            broadcastGraphData();
+
 
             for (int iteration = 0; iteration < maxIterations; iteration++) {
                 long iterationStart = System.currentTimeMillis();
@@ -175,11 +174,7 @@ public class PageRankDistributed {
         }
     }
 
-    private void broadcastGraphData() {
-        // In a real implementation, you might need to broadcast graph data
-        // if processes don't all generate the same random graph
-        // For now, we assume all processes generate the same graph with the same seed
-    }
+
 
     private void computeLocalContributions(double[] localContributions) {
         // Each process computes contributions for its assigned vertices
@@ -279,15 +274,48 @@ public class PageRankDistributed {
             return;
         }
 
-        // Debug: Print all arguments
-        System.out.println("Number of arguments: " + args.length);
+        // Filter out MPJ Express arguments based on position and known patterns
+        List<String> userArgs = new ArrayList<>();
+
+        // MPJ Express typically adds: [rank] [size] [device] [user_args...]
+        // So we skip the first few arguments that match MPJ patterns
+        boolean foundUserArgs = false;
         for (int i = 0; i < args.length; i++) {
-            System.out.println("Argument " + i + ": '" + args[i] + "'");
+            String arg = args[i];
+
+            // Skip MPJ internal arguments at the beginning
+            if (!foundUserArgs) {
+                // Skip single digits (0-9) which are typically rank/size
+                if (arg.matches("^[0-9]$")) {
+                    continue;
+                }
+                // Skip device names
+                if (arg.equals("smpdev") || arg.equals("niodev") || arg.equals("mxdev")) {
+                    continue;
+                }
+                // If we find a larger number or other argument, start collecting user args
+                foundUserArgs = true;
+            }
+
+            // Collect user arguments
+            if (foundUserArgs) {
+                userArgs.add(arg);
+            }
         }
 
-        if (args.length < 4) {
-            System.out.println("Usage: java PageRankDistributed <vertices> <edges> <damping_factor> <max_iterations> [seed]");
-            System.out.println("Example: java PageRankDistributed 1000 5000 0.85 100 42");
+        // Debug: Print filtered arguments
+        if (MPI.COMM_WORLD.Rank() == 0) {
+            System.out.println("Filtered arguments: " + userArgs.size());
+            for (int i = 0; i < userArgs.size(); i++) {
+                System.out.println("User Argument " + i + ": '" + userArgs.get(i) + "'");
+            }
+        }
+
+        if (userArgs.size() < 4) {
+            if (MPI.COMM_WORLD.Rank() == 0) {
+                System.out.println("Usage: mpjrun.sh -np <processes> PageRankDistributed <vertices> <edges> <damping_factor> <max_iterations> [seed]");
+                System.out.println("Example: mpjrun.sh -np 4 PageRankDistributed 1000 5000 0.85 100 42");
+            }
             if (mpiInitialized) {
                 try {
                     MPI.Finalize();
@@ -299,11 +327,11 @@ public class PageRankDistributed {
         }
 
         try {
-            int numVertices = 1000; // Integer.parseInt(args[0]);
-            int numEdges = 5000; // Integer.parseInt(args[1]);
-            double dampingFactor = 0.85; // Double.parseDouble(args[2]);
-            int maxIterations = 100; // Integer.parseInt(args[3]);
-            long seed = 42L; // args.length > 4 ? Long.parseLong(args[4]) : 42L;
+            int numVertices = Integer.parseInt(userArgs.get(0));
+            int numEdges = Integer.parseInt(userArgs.get(1));
+            double dampingFactor = Double.parseDouble(userArgs.get(2));
+            int maxIterations = Integer.parseInt(userArgs.get(3));
+            long seed = userArgs.size() > 4 ? Long.parseLong(userArgs.get(4)) : 42L;
 
             PageRankDistributed pageRank = new PageRankDistributed(numVertices, numEdges, dampingFactor, maxIterations, seed);
 
@@ -321,7 +349,7 @@ public class PageRankDistributed {
                 System.out.println("=========================================\n");
             }
 
-            // Run computation
+
             pageRank.computePageRank();
 
             // Save results (only from rank 0)
